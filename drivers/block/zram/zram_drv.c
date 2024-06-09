@@ -611,6 +611,8 @@ static void read_from_bdev_async(struct zram *zram, struct page *page,
 	submit_bio(bio);
 }
 
+#define PAGE_WB_SIG "page_index="
+
 #define PAGE_WRITEBACK			0
 #define HUGE_WRITEBACK			(1<<0)
 #define IDLE_WRITEBACK			(1<<1)
@@ -621,7 +623,7 @@ static ssize_t writeback_store(struct device *dev,
 {
 	struct zram *zram = dev_to_zram(dev);
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
-	unsigned long index;
+	unsigned long index = 0;
 	struct bio bio;
 	struct bio_vec bio_vec;
 	struct page *page;
@@ -633,10 +635,6 @@ static ssize_t writeback_store(struct device *dev,
 		mode = IDLE_WRITEBACK;
 	else if (sysfs_streq(buf, "huge"))
 		mode = HUGE_WRITEBACK;
-<<<<<<< HEAD
-	else
-		return -EINVAL;
-=======
 	else if (sysfs_streq(buf, "huge_idle"))
 		mode = IDLE_WRITEBACK | HUGE_WRITEBACK;
 	else if (sysfs_streq(buf, "incompressible"))
@@ -652,7 +650,6 @@ static ssize_t writeback_store(struct device *dev,
 		nr_pages = 1;
 		mode = PAGE_WRITEBACK;
 	}
->>>>>>> 9d4c0f1bf2e1 (zram: backport from 95848dcb9d67)
 
 	down_read(&zram->init_lock);
 	if (!init_done(zram)) {
@@ -671,17 +668,7 @@ static ssize_t writeback_store(struct device *dev,
 		goto release_init_lock;
 	}
 
-<<<<<<< HEAD
-	for (index = 0; index < nr_pages; index++) {
-		struct bio_vec bvec;
-
-		bvec.bv_page = page;
-		bvec.bv_len = PAGE_SIZE;
-		bvec.bv_offset = 0;
-
-=======
 	for (; nr_pages != 0; index++, nr_pages--) {
->>>>>>> 9d4c0f1bf2e1 (zram: backport from 95848dcb9d67)
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
 			spin_unlock(&zram->wb_limit_lock);
@@ -1512,25 +1499,16 @@ compress_again:
 				__GFP_NOWARN |
 				__GFP_HIGHMEM |
 				__GFP_MOVABLE);
-<<<<<<< HEAD
-	if (!handle) {
-		zcomp_stream_put(zram->comp);
-=======
 	if (IS_ERR_VALUE(handle)) {
 		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
->>>>>>> 9d4c0f1bf2e1 (zram: backport from 95848dcb9d67)
 		atomic64_inc(&zram->stats.writestall);
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				GFP_NOIO | __GFP_HIGHMEM |
 				__GFP_MOVABLE);
-<<<<<<< HEAD
-		if (handle)
-=======
 		if (IS_ERR_VALUE(handle))
 			return PTR_ERR((void *)handle);
 
 		if (comp_len != PAGE_SIZE)
->>>>>>> 9d4c0f1bf2e1 (zram: backport from 95848dcb9d67)
 			goto compress_again;
 		/*
 		 * If the page is not compressible, you need to acquire the
