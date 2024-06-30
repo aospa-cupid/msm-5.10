@@ -75,6 +75,11 @@ static unsigned int sched_nr_latency = 8;
  * parent will (try to) run first.
  */
 unsigned int sysctl_sched_child_runs_first __read_mostly;
+unsigned int sysctl_sched_min_util_for_headroom __read_mostly = 20;
+unsigned int sysctl_sched_max_util_for_headroom __read_mostly = 400;
+unsigned int sysctl_sched_little_headroom __read_mostly = 1280;
+unsigned int sysctl_sched_big_headroom __read_mostly = 1280;
+unsigned int sysctl_sched_prime_headroom __read_mostly = 1024;
 
 /*
  * SCHED_OTHER wake-up granularity.
@@ -134,6 +139,53 @@ int __weak arch_asym_cpu_priority(int cpu)
  */
 unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
 #endif
+
+
+static struct ctl_table sched_fair_sysctls[] = {
+	{
+		.procname       = "sched_min_util_for_headroom",
+		.data           = &sysctl_sched_min_util_for_headroom,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+		{
+    		.procname       = "sched_max_util_for_headroom",
+    		.data           = &sysctl_sched_max_util_for_headroom,
+    		.maxlen         = sizeof(unsigned int),
+    		.mode           = 0644,
+    		.proc_handler   = proc_dointvec,
+    	},
+		{
+    		.procname       = "sched_little_headroom",
+    		.data           = &sysctl_sched_little_headroom,
+    		.maxlen         = sizeof(unsigned int),
+    		.mode           = 0644,
+    		.proc_handler   = proc_dointvec,
+    	},
+		{
+    		.procname       = "sched_big_headroom",
+    		.data           = &sysctl_sched_big_headroom,
+    		.maxlen         = sizeof(unsigned int),
+    		.mode           = 0644,
+    		.proc_handler   = proc_dointvec,
+    	},
+		{
+    		.procname       = "sched_prime_headroom",
+    		.data           = &sysctl_sched_prime_headroom,
+    		.maxlen         = sizeof(unsigned int),
+    		.mode           = 0644,
+    		.proc_handler   = proc_dointvec,
+    	},
+	{}
+};
+
+static int __init sched_fair_sysctl_init(void)
+{
+	register_sysctl_init("kernel", sched_fair_sysctls);
+	return 0;
+}
+late_initcall(sched_fair_sysctl_init);
 
 static inline void update_load_add(struct load_weight *lw, unsigned long inc)
 {
@@ -11261,6 +11313,36 @@ static void propagate_entity_cfs_rq(struct sched_entity *se)
 #else
 static void propagate_entity_cfs_rq(struct sched_entity *se) { }
 #endif
+
+
+unsigned long __always_inline
+apply_dvfs_headroom(unsigned long util, int cpu)
+{
+
+		unsigned long capacity = capacity_orig_of(cpu);
+		unsigned long headroom;
+
+		if (util >= capacity)
+			return util;
+		if ((util < sysctl_sched_min_util_for_headroom)||(util > sysctl_sched_max_util_for_headroom))
+		    return util;
+
+		/*
+		 * Taper the boosting at e top end as these are expensive and
+		 * we don't need that much of a big headroom as we approach max
+		 * capacity
+		 *
+		 */
+		unsigned int sched_dvfs_headroom[8] = {sysctl_sched_little_headroom,sysctl_sched_little_headroom,
+		sysctl_sched_little_headroom,sysctl_sched_little_headroom,sysctl_sched_big_headroom,
+		sysctl_sched_big_headroom,sysctl_sched_big_headroom,sysctl_sched_prime_headroom};
+		headroom = (capacity - util);
+		/* formula: headroom * (1.X - 1) == headroom * 0.X */
+		headroom = headroom *
+			(sched_dvfs_headroom[cpu] - SCHED_CAPACITY_SCALE) >> SCHED_CAPACITY_SHIFT;
+		return util + headroom;
+
+}
 
 static void detach_entity_cfs_rq(struct sched_entity *se)
 {
